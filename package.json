@@ -26,6 +26,7 @@
     "expo-pdf-text-extract": "^1.0.1",
     "expo-pdf-to-image": "^1.0.0",
     "expo-router": "~6.0.23",
+    "expo-sharing": "~14.0.8",
     "expo-splash-screen": "~31.0.13",
     "expo-sqlite": "~16.0.10",
     "expo-status-bar": "~3.0.9",

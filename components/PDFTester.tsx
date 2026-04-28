@@ -1,7 +1,16 @@
 import * as DocumentPicker from 'expo-document-picker';
 import ExpoPdfToImageModule from 'expo-pdf-to-image';
 import { useState } from 'react';
-import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
 import { Directory, File, Paths } from 'expo-file-system';
 
@@ -107,6 +116,7 @@ export function PDFTester() {
   const [convertedJpg, setConvertedJpg] = useState<ConvertedJpg | null>(null);
   const [isPicking, setIsPicking] = useState(false);
   const [isConverting, setIsConverting] = useState(false);
+  const [isViewing, setIsViewing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const handleTestUpload = async () => {
@@ -138,6 +148,14 @@ export function PDFTester() {
       setIsPicking(false);
       setIsConverting(false);
     }
+  };
+
+  const handleOpenImage = () => {
+    if (!convertedJpg) {
+      return;
+    }
+
+    setIsViewing(true);
   };
 
   return (
@@ -184,7 +202,7 @@ export function PDFTester() {
       {convertedJpg ? (
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Cached JPG</Text>
-          <Image source={{ uri: convertedJpg.uri }} style={styles.preview} resizeMode="cover" />
+          <Image source={{ uri: convertedJpg.uri }} style={styles.preview} resizeMode="contain" />
           <Text style={styles.cardText}>{convertedJpg.name}</Text>
           <Text style={styles.cardMeta} numberOfLines={1} ellipsizeMode="middle">
             {convertedJpg.uri}
@@ -192,10 +210,42 @@ export function PDFTester() {
           {typeof convertedJpg.size === 'number' ? (
             <Text style={styles.cardMeta}>{Math.round(convertedJpg.size / 1024)} KB</Text>
           ) : null}
+          <Pressable
+            accessibilityRole="button"
+            onPress={handleOpenImage}
+            style={({ pressed }) => [
+              styles.openButton,
+              pressed ? styles.buttonPressed : null,
+            ]}>
+            <Text style={styles.openButtonLabel}>View in App</Text>
+          </Pressable>
         </View>
       ) : null}
 
       {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
+      <Modal
+        animationType="slide"
+        visible={isViewing}
+        onRequestClose={() => setIsViewing(false)}
+        presentationStyle="fullScreen">
+        <View style={styles.viewerContainer}>
+          <View style={styles.viewerHeader}>
+            <Text style={styles.viewerTitle}>Cached JPG Preview</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setIsViewing(false)}
+              style={({ pressed }) => [
+                styles.viewerClose,
+                pressed ? styles.viewerClosePressed : null,
+              ]}>
+              <Text style={styles.viewerCloseLabel}>Close</Text>
+            </Pressable>
+          </View>
+          {convertedJpg ? (
+            <Image source={{ uri: convertedJpg.uri }} style={styles.viewerImage} resizeMode="contain" />
+          ) : null}
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -264,6 +314,58 @@ const styles = StyleSheet.create({
     height: 220,
     marginBottom: 8,
     width: '100%',
+    alignSelf: 'center',
+  },
+  openButton: {
+    alignItems: 'center',
+    backgroundColor: '#0EA5E9',
+    borderRadius: 12,
+    justifyContent: 'center',
+    marginTop: 8,
+    minHeight: 44,
+    paddingHorizontal: 12,
+  },
+  openButtonLabel: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  viewerContainer: {
+    backgroundColor: '#020617',
+    flex: 1,
+    padding: 16,
+  },
+  viewerHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  viewerTitle: {
+    color: '#F8FAFC',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  viewerClose: {
+    backgroundColor: '#1E293B',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  viewerClosePressed: {
+    opacity: 0.85,
+  },
+  viewerCloseLabel: {
+    color: '#E2E8F0',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  viewerImage: {
+    backgroundColor: '#0F172A',
+    borderRadius: 16,
+    flex: 1,
+    width: '100%',
+    alignSelf: 'center',
   },
   cardMeta: {
     color: '#94A3B8',
