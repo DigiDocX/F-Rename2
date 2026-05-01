@@ -55,14 +55,16 @@ export async function renderPdfPageToImage(
   PDF_IMAGE_DIRECTORY.create({ intermediates: true, idempotent: true });
 
   const imagePaths = await (ExpoPdfToImageModule as {
-    convertPdfToImages: (uri: string, options?: Record<string, unknown>) => Promise<string[]>;
-  }).convertPdfToImages(pdfUri, { dpi, pages: [page] });
+    convertPdfToImages: (uri: string) => Promise<string[]>;
+  }).convertPdfToImages(pdfUri);
 
   if (imagePaths.length === 0) {
     throw new Error('No image was generated from the selected PDF.');
   }
 
-  const sourceImage = new File(ensureFileUri(imagePaths[0]));
+  const pageIndex = Math.max(0, Math.min(imagePaths.length - 1, page - 1));
+
+  const sourceImage = new File(ensureFileUri(imagePaths[pageIndex]));
   const destinationImage = getDestinationImage(pdfName, page);
 
   if (destinationImage.exists) {
