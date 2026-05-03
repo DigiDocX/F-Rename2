@@ -3,6 +3,13 @@ import { Image } from 'expo-image';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import {
+  compromiseExtractEntities,
+  pickTopEntityCandidates,
+  scoreExtractedEntities,
+  type ExtractedEntity,
+  type ScoredEntity,
+} from '@/constants/entity-extraction';
 import { runMlKitOcrOnCroppedImage } from '@/lib/pdf-ocr';
 import { buildPdfOcrInput } from '@/lib/pdf-ocr-input';
 
@@ -14,27 +21,25 @@ type PickedPdf = {
   size?: number;
 };
 
+type PickerAssetWithCopy = DocumentPicker.DocumentPickerAsset & {
+  fileCopyUri?: string | null;
+  size?: number;
+  name?: string | null;
+};
+
 function getPickedPdf(result: DocumentPicker.DocumentPickerResult): PickedPdf | null {
   if (result.canceled) {
     return null;
   }
 
   if ('assets' in result && result.assets && result.assets.length > 0) {
-    const asset = result.assets[0];
+    const asset = result.assets[0] as PickerAssetWithCopy;
     const resolvedUri = asset.fileCopyUri ?? asset.uri;
 
     return {
       uri: resolvedUri,
       name: asset.name ?? 'document.pdf',
       size: asset.size,
-    };
-  }
-
-  if ('uri' in result) {
-    return {
-      uri: result.fileCopyUri ?? result.uri,
-      name: result.name ?? 'document.pdf',
-      size: result.size,
     };
   }
 
@@ -61,6 +66,8 @@ export function PDFTester() {
   const [pickedPdf, setPickedPdf] = useState<PickedPdf | null>(null);
   const [croppedImageUri, setCroppedImageUri] = useState<string | null>(null);
   const [ocrText, setOcrText] = useState('');
+  const [entities, setEntities] = useState<ExtractedEntity[]>([]);
+  const [topEntities, setTopEntities] = useState<ScoredEntity[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -83,12 +90,16 @@ export function PDFTester() {
     setPickedPdf(pdf);
     setCroppedImageUri(null);
     setOcrText('');
+    setEntities([]);
+    setTopEntities([]);
   }, []);
 
   const handleClearPdf = useCallback(() => {
     setPickedPdf(null);
     setCroppedImageUri(null);
     setOcrText('');
+    setEntities([]);
+    setTopEntities([]);
     setErrorMessage(null);
   }, []);
 
@@ -114,7 +125,16 @@ export function PDFTester() {
         includeElements: false,
       });
 
-      setOcrText(result.text ?? '');
+      const normalizedText = result.normalizedText ?? '';
+      setOcrText(normalizedText);
+
+      const entityInputs = [{ source: 'ocr' as const, text: normalizedText }];
+      const extracted = compromiseExtractEntities(entityInputs);
+      const scored = scoreExtractedEntities(entityInputs, extracted);
+      const top = pickTopEntityCandidates(scored, 3);
+
+      setEntities(extracted);
+      setTopEntities(top);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'OCR failed.';
       setErrorMessage(message);
@@ -171,6 +191,45 @@ export function PDFTester() {
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>OCR Text</Text>
         <Text style={styles.ocrText}>{ocrText || 'No text yet.'}</Text>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Tagged Entities</Text>
+        {entities.length === 0 ? (
+          <Text style={styles.secondaryText}>No entities tagged yet.</Text>
+        ) : (
+          <View style={styles.entityList}>
+            {entities.map((entity, index) => (
+              <View key={`${entity.type}-${entity.text}-${index}`} style={styles.entityRow}>
+                <View style={styles.entityTypeBadge}>
+                  <Text style={styles.entityTypeText}>{entity.type.toUpperCase()}</Text>
+                </View>
+                <Text style={styles.entityValueText}>{entity.text}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Top Candidates</Text>
+        {topEntities.length === 0 ? (
+          <Text style={styles.secondaryText}>Run OCR to score candidates.</Text>
+        ) : (
+          <View style={styles.entityList}>
+            {topEntities.map((entity, index) => (
+              <View key={`${entity.type}-${entity.text}-${index}`} style={styles.entityRow}>
+                <View style={styles.entityTypeBadge}>
+                  <Text style={styles.entityTypeText}>{entity.type.toUpperCase()}</Text>
+                </View>
+                <View style={styles.entityScoreBlock}>
+                  <Text style={styles.entityValueText}>{entity.text}</Text>
+                  <Text style={styles.entityScoreText}>Score {entity.score}</Text>
+                </View>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
     </ScrollView>
   );
@@ -253,5 +312,37 @@ const styles = StyleSheet.create({
     color: '#E2E8F0',
     fontSize: 13,
     lineHeight: 18,
+  },
+  entityList: {
+    gap: 10,
+  },
+  entityRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+  },
+  entityTypeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    backgroundColor: '#1D4ED8',
+  },
+  entityTypeText: {
+    color: '#E2E8F0',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  entityValueText: {
+    color: '#E2E8F0',
+    fontSize: 13,
+    flexShrink: 1,
+  },
+  entityScoreBlock: {
+    flex: 1,
+    gap: 4,
+  },
+  entityScoreText: {
+    color: '#94A3B8',
+    fontSize: 12,
   },
 });

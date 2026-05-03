@@ -36,6 +36,8 @@ export type OcrBlock = {
 
 export type OcrResult = {
   text: string;
+  normalizedText: string;
+  normalizedLines: string[];
   blocks?: OcrBlock[];
   lines?: OcrLine[];
 };
@@ -139,6 +141,17 @@ function extractLines(blocks: MlKitBlock[], includeElements: boolean): OcrLine[]
   return lines;
 }
 
+function normalizeOcrText(text: string) {
+  const collapsed = text.replace(/[\t\f\v]+/g, ' ').replace(/[ ]{2,}/g, ' ');
+  const rawLines = collapsed.split(/\r?\n/);
+  const normalizedLines = rawLines
+    .map((line) => line.trim().replace(/[ ]{2,}/g, ' '))
+    .filter((line) => line.length > 0);
+  const normalizedText = normalizedLines.join('\n');
+
+  return { normalizedText, normalizedLines };
+}
+
 export async function runMlKitOcr(
   imageUri: string,
   options: OcrOptions = {}
@@ -149,8 +162,9 @@ export async function runMlKitOcr(
   const includeBlocks = options.includeBlocks ?? false;
   const includeLines = options.includeLines ?? false;
   const includeElements = options.includeElements ?? false;
+  const { normalizedText, normalizedLines } = normalizeOcrText(text);
 
-  const response: OcrResult = { text };
+  const response: OcrResult = { text, normalizedText, normalizedLines };
 
   if (includeBlocks && result?.blocks) {
     response.blocks = result.blocks.map((block) =>
