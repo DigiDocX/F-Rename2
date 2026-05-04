@@ -252,10 +252,16 @@ export function scoreExtractedEntities(
   entities: ExtractedEntity[]
 ): ScoredEntity[] {
   const orderedInputs = sortEntityInputsByPriority(inputs);
-  const primaryText = orderedInputs[0]?.text ?? '';
+  const textBySource = new Map<EntitySource, string>();
+  for (const input of orderedInputs) {
+    if (!textBySource.has(input.source)) {
+      textBySource.set(input.source, input.text);
+    }
+  }
 
   return entities.map((entity) => {
-    const lineIndex = findEntityLineIndex(primaryText, entity.text);
+    const sourceText = textBySource.get(entity.source) ?? orderedInputs[0]?.text ?? '';
+    const lineIndex = findEntityLineIndex(sourceText, entity.text);
     return {
       ...entity,
       lineIndex,
@@ -290,4 +296,49 @@ export function pickTopEntityCandidates(
       return left.text.localeCompare(right.text);
     })
     .slice(0, targetCount);
+}
+
+function sanitizeFilenamePart(value: string): string {
+  const normalized = normalizeWhitespace(value);
+  if (!normalized) {
+    return '';
+  }
+
+  return normalized
+    .replace(/[\\/:*?"<>|\u0000-\u001F]/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^[._-]+|[._-]+$/g, '');
+}
+
+function formatDateForFilename(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+}
+
+export function buildFilenameFromEntities(
+  scoredEntities: ScoredEntity[],
+  maxLength = 60,
+  now: Date = new Date()
+): string {
+  const safeMax = Math.max(1, maxLength);
+  const candidates = pickTopEntityCandidates(scoredEntities, 3);
+  const parts = candidates.map((entity) => sanitizeFilenamePart(entity.text)).filter(Boolean);
+  let filename = parts.join('_');
+
+  if (!filename) {
+    return `Document_${formatDateForFilename(now)}`;
+  }
+
+  if (filename.length > safeMax) {
+    filename = filename.slice(0, safeMax).replace(/_+$/g, '');
+  }
+
+  if (!filename) {
+    return `Document_${formatDateForFilename(now)}`;
+  }
+
+  return filename;
 }
