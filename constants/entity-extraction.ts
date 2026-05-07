@@ -127,6 +127,24 @@ function normalizeEntityText(type: EntityType, value: string): string {
   return normalizeCasing(normalized);
 }
 
+function extractFallbackTitle(text: string): string | null {
+  const lines = text.split(/\r?\n/);
+  for (const line of lines) {
+    const normalized = normalizeWhitespace(line).replace(/[^\w\s-]/g, '');
+    if (normalized.length < 3 || normalized.length > 60) {
+      continue;
+    }
+
+    if (!/[A-Za-z]/.test(normalized)) {
+      continue;
+    }
+
+    return normalized;
+  }
+
+  return null;
+}
+
 function addEntitiesFromRegex(
   text: string,
   type: EntityType,
@@ -206,6 +224,13 @@ export function compromiseExtractEntities(inputs: EntityInput[]): ExtractedEntit
         addEntity(input.source, 'person', cleaned);
       }
     });
+  }
+
+  if (results.length === 0 && orderedInputs.length > 0) {
+    const fallbackText = extractFallbackTitle(orderedInputs[0].text);
+    if (fallbackText) {
+      addEntity(orderedInputs[0].source, 'title', fallbackText);
+    }
   }
 
   return results;

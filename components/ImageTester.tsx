@@ -1,5 +1,5 @@
-import * as ImagePicker from 'expo-image-picker';
 import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -14,7 +14,7 @@ import {
 import { runMlKitOcrOnCroppedImage } from '@/lib/pdf-ocr';
 import { cropImageTopPercent, type CroppedImage } from '@/lib/pdf-page-crop';
 
-const CROP_PERCENT = 0.25;
+const CROP_PERCENT = 0.5;
 
 type PickedImage = {
   uri: string;
