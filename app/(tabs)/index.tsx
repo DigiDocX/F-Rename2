@@ -222,11 +222,16 @@ export default function HomeScreen() {
       return;
     }
     checkAllFilesAccess().then((s) => {
+      console.log('[F-Rename] checkAllFilesAccess result:', s, 'Platform.Version:', Platform.Version);
       if (s === 'granted') setPermStatus('granted');
       else if (s === 'unavailable') setPermStatus('unavailable');
       else setPermStatus('denied');
+    }).catch((err) => {
+      console.log('[F-Rename] checkAllFilesAccess threw:', err);
+      setPermStatus('denied');
     });
   }, []);
+
 
   // ── Init ─────────────────────────────────────────────────────────────────
   useEffect(() => {

@@ -1,39 +1,46 @@
 import { Linking, Platform } from 'react-native';
 import * as IntentLauncher from 'expo-intent-launcher';
-import * as FileSystem from 'expo-file-system';
+import { Directory } from 'expo-file-system';
 import Constants from 'expo-constants';
 
 type AllFilesAccessStatus = 'granted' | 'blocked' | 'denied' | 'opened-settings' | 'unavailable';
+
+const EXTERNAL_STORAGE_ROOT = 'file:///storage/emulated/0/';
 
 function getAndroidPackageName() {
   return Constants.expoConfig?.android?.package ?? Constants.manifest?.android?.package;
 }
 
 /**
- * Checks whether the app truly has MANAGE_EXTERNAL_STORAGE access by attempting
- * to list the root of external storage. This is the ground-truth check:
+ * Ground-truth check for MANAGE_EXTERNAL_STORAGE.
  *
- * react-native-permissions's check() is unreliable for MANAGE_EXTERNAL_STORAGE
- * because it's a special permission, NOT a standard runtime permission — Android
- * doesn't reflect its grant state through the normal permission result API.
+ * WHY NOT react-native-permissions:
+ *   MANAGE_EXTERNAL_STORAGE is a special app access permission, not a standard
+ *   runtime permission. Android's PackageManager.checkPermission() always returns
+ *   DENIED for it — the only correct check is Environment.isExternalStorageManager().
+ *   We approximate that by actually trying to list /storage/emulated/0 using the
+ *   expo-file-system v19 Directory API, which calls native code under the hood.
  *
- * By actually reading /storage/emulated/0 we get a definitive answer that
- * correctly updates the moment the user toggles the switch in Settings.
+ * Returns 'granted' if we can successfully list /storage/emulated/0.
+ * Returns 'denied'  if the listing throws (permission denied or path error).
+ * Returns 'unavailable' on iOS or Android < 11 (API 30).
  */
 export async function checkAllFilesAccess(): Promise<AllFilesAccessStatus> {
   if (Platform.OS !== 'android') {
     return 'unavailable';
   }
 
-  // Devices below API 30 don't have MANAGE_EXTERNAL_STORAGE —
-  // READ_EXTERNAL_STORAGE (auto-granted at install) is sufficient there.
+  // Below API 30, READ_EXTERNAL_STORAGE is sufficient and auto-granted at install.
   if (Platform.Version < 30) {
     return 'granted';
   }
 
   try {
-    const result = await (FileSystem as any).readDirectoryAsync('/storage/emulated/0');
-    if (Array.isArray(result)) {
+    // expo-file-system v19: Directory.list() is synchronous and throws on access denial
+    const storageDir = new Directory(EXTERNAL_STORAGE_ROOT);
+    const entries = storageDir.list();
+    // Any non-exception result (even empty array) means we have access
+    if (Array.isArray(entries) || entries != null) {
       return 'granted';
     }
     return 'denied';
@@ -49,7 +56,7 @@ export async function openAllFilesAccessSettings(): Promise<boolean> {
 
   const packageName = getAndroidPackageName();
 
-  // Try app-specific All Files Access screen first (cleaner UX)
+  // 1. Try app-specific All Files Access settings (best UX — takes you straight to the toggle)
   if (packageName) {
     try {
       await IntentLauncher.startActivityAsync(
@@ -58,11 +65,11 @@ export async function openAllFilesAccessSettings(): Promise<boolean> {
       );
       return true;
     } catch {
-      // Some OEMs don't support this intent — fall through
+      // Some OEMs (OPPO/OnePlus/Xiaomi) don't support this intent — fall through
     }
   }
 
-  // Fall back to the global All Files Access list
+  // 2. Global All Files Access list
   try {
     await IntentLauncher.startActivityAsync(
       'android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION',
@@ -70,15 +77,13 @@ export async function openAllFilesAccessSettings(): Promise<boolean> {
     );
     return true;
   } catch {
-    // Last resort: Linking
+    // ignore
   }
 
-  const url = 'android.settings.MANAGE_ALL_FILES_ACCESS_PERMISSION';
+  // 3. Last resort: system settings home
   try {
-    if (await Linking.canOpenURL(url)) {
-      await Linking.openURL(url);
-      return true;
-    }
+    await IntentLauncher.startActivityAsync('android.settings.SETTINGS', {});
+    return true;
   } catch {
     // ignore
   }
