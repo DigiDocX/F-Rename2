@@ -14,7 +14,13 @@
     },
     "android": {
       "permissions": [
-        "MANAGE_EXTERNAL_STORAGE"
+        "MANAGE_EXTERNAL_STORAGE",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO",
+        "READ_MEDIA_AUDIO",
+        "ACCESS_MEDIA_LOCATION"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -33,6 +39,14 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow F-Rename to access your media library.",
+          "savePhotosPermission": "Allow F-Rename to save files to your media library.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ],
       [
         "react-native-permissions",
         {
