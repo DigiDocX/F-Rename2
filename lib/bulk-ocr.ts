@@ -59,12 +59,39 @@ function cleanBinaryText(raw: string): string {
 async function readFirstChunk(fileUri: string): Promise<string> {
   try {
     return await FileSystem.readAsStringAsync(fileUri, {
-      encoding: 'utf8',   // EncodingType enum removed in expo-file-system v19
+      encoding: 'base64',
       length: READ_LENGTH,
       position: 0,
     });
   } catch {
     // Binary-only PDF or access denied — degrade gracefully
+    return '';
+  }
+}
+
+/**
+ * Decodes base64 string to ascii
+ */
+function decodeBase64ToAscii(base64: string): string {
+  try {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+    let str = '';
+    for (let i = 0; i < base64.length; i += 4) {
+      const enc1 = chars.indexOf(base64.charAt(i));
+      const enc2 = chars.indexOf(base64.charAt(i + 1));
+      const enc3 = chars.indexOf(base64.charAt(i + 2));
+      const enc4 = chars.indexOf(base64.charAt(i + 3));
+
+      const chr1 = (enc1 << 2) | (enc2 >> 4);
+      const chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+      const chr3 = ((enc3 & 3) << 6) | enc4;
+
+      str += String.fromCharCode(chr1);
+      if (enc3 !== 64) str += String.fromCharCode(chr2);
+      if (enc4 !== 64) str += String.fromCharCode(chr3);
+    }
+    return str;
+  } catch {
     return '';
   }
 }
@@ -121,11 +148,14 @@ export async function runNlpRenameQueue(
 
     try {
       // ── Step 1: Read first 1,000 chars (low memory footprint) ──────────
-      const rawChunk  = await readFirstChunk(pdf.uri);
+      const rawBase64 = await readFirstChunk(pdf.uri);
+      const rawChunk  = decodeBase64ToAscii(rawBase64);
       const cleanText = cleanBinaryText(rawChunk);
 
-      // ── Step 2: Local on-device NLP noun extraction ────────────────────
-      const doc   = nlp(cleanText);
+      // ── Step 2: Local on-device NLP noun extraction ────────────
+      // Feed both the file name (without .pdf) and any extracted text to compromise
+      const baseName = pdf.name.replace(/\.pdf$/i, '');
+      const doc   = nlp(baseName + ' ' + cleanText);
       const nouns = (doc.nouns().out('array') as string[])
         .filter((n: string) => n.length > 2)
         .slice(0, 6);
@@ -134,22 +164,15 @@ export async function runNlpRenameQueue(
       const candidates =
         nouns.length > 0
           ? nouns
-          : [pdf.name.replace(/\.pdf$/i, '')];
+          : [baseName];
 
       // ── Step 3: Build sanitized rename target ──────────────────────────
       const suggestedFilename = buildSanitizedFilename(candidates);
 
-      // ── Step 4: Physical rename on disk ────────────────────────────────
-      const dir     = pdf.path.substring(0, pdf.path.lastIndexOf('/') + 1);
-      const newPath = dir + suggestedFilename;
-      const newUri  = 'file://' + newPath;
+      // We no longer physically rename the file immediately so the user can 
+      // see the original and suggested names in the UI.
 
-      await FileSystem.moveAsync({ from: pdf.uri, to: newUri });
-
-      // ── Step 5: Broadcast so MediaStore registers the new filename ─────
-      await broadcastMediaScan(newPath);
-
-      // ── Step 6: Report success to the UI ──────────────────────────────
+      // ── Step 4: Report success to the UI ──────────────────────────────
       onItemUpdate({
         id: pdf.id,
         status: 'Processed',
@@ -157,11 +180,12 @@ export async function runNlpRenameQueue(
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Unknown error';
-      console.warn(`[nlp-queue] Failed to rename "${pdf.name}":`, msg);
+      console.warn(`[nlp-queue] Failed to process "${pdf.name}":`, msg);
       onItemUpdate({ id: pdf.id, status: 'Failed', suggestedTitle: null });
     }
 
-    // ── Step 7: Yield 50 ms — allow JS engine to clear working buffers ──
+    // ── Step 5: Yield 50 ms — allow JS engine to clear working buffers ──
     await sleep(YIELD_DELAY_MS);
   }
 }
+
