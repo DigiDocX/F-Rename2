@@ -36,9 +36,12 @@ function getStatusColor(status: PdfStatus): string {
 
 // ─── List Item ────────────────────────────────────────────────────────────────
 
-type ListItemProps = { item: DiscoveredPdf };
+type ListItemProps = { 
+  item: DiscoveredPdf; 
+  activeTab: 'Original' | 'Suggested';
+};
 
-function PdfListItem({ item }: ListItemProps) {
+function PdfListItem({ item, activeTab }: ListItemProps) {
   const statusColor = getStatusColor(item.status);
 
   return (
@@ -61,12 +64,16 @@ function PdfListItem({ item }: ListItemProps) {
       </Text>
 
       {/* Row 3: suggested rename target */}
-      <View style={styles.renameRow}>
-        <Text style={styles.renameLabel}>Suggested Rename Target</Text>
-        <Text style={styles.renameValue}>
-          {item.suggestedTitle ?? '—'}
-        </Text>
-      </View>
+      {activeTab === 'Suggested' && (
+        <View style={styles.renameRow}>
+          <Text style={styles.renameLabel}>Suggested Rename Target</Text>
+          <View style={styles.renameActionRow}>
+            <Text style={styles.renameValue}>
+              {item.suggestedTitle ?? '—'}
+            </Text>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -79,6 +86,7 @@ export default function HomeScreen() {
   const [isProcessing,setIsProcessing]= useState(false);
   const [elapsedMs,   setElapsedMs]   = useState<number | null>(null);
   const [queueIndex,  setQueueIndex]  = useState(0);
+  const [activeTab,   setActiveTab]   = useState<'Original' | 'Suggested'>('Original');
 
   // Stable ref so the NLP queue closure always reads the latest pdfs length
   const pdfCountRef = useRef(0);
@@ -156,11 +164,27 @@ export default function HomeScreen() {
           )}
         </View>
 
+        {/* ── Tabs ── */}
+        <View style={styles.tabsContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'Original' && styles.activeTab]}
+            onPress={() => setActiveTab('Original')}
+          >
+            <Text style={[styles.tabText, activeTab === 'Original' && styles.activeTabText]}>Original Names</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'Suggested' && styles.activeTab]}
+            onPress={() => setActiveTab('Suggested')}
+          >
+            <Text style={[styles.tabText, activeTab === 'Suggested' && styles.activeTabText]}>Suggested Names</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* ── PDF List — Phase 2 ── */}
         <FlatList
-          data={pdfs}
+          data={activeTab === 'Original' ? pdfs : pdfs.filter(p => p.suggestedTitle || p.status === 'Processing...' || p.status === 'Failed')}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <PdfListItem item={item} />}
+          renderItem={({ item }) => <PdfListItem item={item} activeTab={activeTab} />}
           contentContainerStyle={styles.listContent}
           initialNumToRender={10}
           maxToRenderPerBatch={10}
@@ -224,6 +248,32 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
 
+  // ── Tabs
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#0F172A',
+    borderRadius: 8,
+    padding: 4,
+    marginBottom: 8,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 6,
+  },
+  activeTab: {
+    backgroundColor: '#1E293B',
+  },
+  tabText: {
+    color: '#94A3B8',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  activeTabText: {
+    color: '#F8FAFC',
+  },
+
   // ── List
   listContent: {
     paddingBottom: 24,
@@ -274,21 +324,26 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   renameRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 4,
-    gap: 8,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#1E293B',
+    gap: 4,
   },
   renameLabel: {
     color: '#94A3B8',
     fontSize: 11,
     fontWeight: '600',
-    flexShrink: 0,
+  },
+  renameActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
   },
   renameValue: {
     color: '#60A5FA',
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '500',
     flex: 1,
     textAlign: 'right',
