@@ -8,6 +8,8 @@ import {
   scoreExtractedEntities,
 } from '@/constants/entity-extraction';
 import type { DiscoveredPdf, PdfStatus } from '@/lib/media-query';
+import { runMlKitOcrOnCroppedImage } from '@/lib/pdf-ocr';
+import { buildPdfOcrInput } from '@/lib/pdf-ocr-input';
 
 const { AceScannerModule } = NativeModules;
 
@@ -133,8 +135,22 @@ export async function runPdfRenameQueue(
 
     try {
       let extractedText = '';
-      if (AceScannerModule?.extractPdfText) {
-        extractedText = await AceScannerModule.extractPdfText(pdf.uri);
+      try {
+        const input = await buildPdfOcrInput(pdf.uri, pdf.name, {
+          cropPercent: 0.5,
+        });
+
+        const result = await runMlKitOcrOnCroppedImage(input.croppedImage, {
+          includeLines: false,
+          includeBlocks: false,
+          includeElements: false,
+        });
+        extractedText = result.normalizedText ?? '';
+      } catch (ocrErr) {
+        console.warn(`[pdf-rename-queue] OCR failed for "${pdf.name}", falling back to native extraction:`, ocrErr);
+        if (AceScannerModule?.extractPdfText) {
+          extractedText = await AceScannerModule.extractPdfText(pdf.uri);
+        }
       }
 
       const baseName = pdf.name.replace(/\.pdf$/i, '');

@@ -20,7 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { discoverPDFs, type DiscoveredPdf, type PdfStatus } from '@/lib/media-query';
-import { runPdfRenameQueue, applyRename, type PdfRenameItemUpdate } from '@/lib/pdf-rename-queue';
+import { runPdfRenameQueue, type PdfRenameItemUpdate } from '@/lib/pdf-rename-queue';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -39,10 +39,9 @@ function getStatusColor(status: PdfStatus): string {
 type ListItemProps = { 
   item: DiscoveredPdf; 
   activeTab: 'Original' | 'Suggested';
-  onApplyRename: (id: string, newFilename: string) => void;
 };
 
-function PdfListItem({ item, activeTab, onApplyRename }: ListItemProps) {
+function PdfListItem({ item, activeTab }: ListItemProps) {
   const statusColor = getStatusColor(item.status);
 
   return (
@@ -72,14 +71,6 @@ function PdfListItem({ item, activeTab, onApplyRename }: ListItemProps) {
             <Text style={styles.renameValue}>
               {item.suggestedTitle ?? '—'}
             </Text>
-            {item.suggestedTitle && item.status !== 'Pending Local Processing...' && (
-              <TouchableOpacity 
-                style={styles.applyButton} 
-                onPress={() => onApplyRename(item.id, item.suggestedTitle!)}
-              >
-                <Text style={styles.applyButtonText}>Apply</Text>
-              </TouchableOpacity>
-            )}
           </View>
           {item.status === 'Failed' && item.errorMessage ? (
             <Text style={styles.errorMessage} numberOfLines={2}>
@@ -150,25 +141,6 @@ export default function HomeScreen() {
     setIsProcessing(false);
   }, [isScanning, isProcessing]);
 
-  const handleApplyRename = useCallback(async (id: string, newFilename: string) => {
-    const pdf = pdfs.find(p => p.id === id);
-    if (!pdf) return;
-
-    try {
-      const newPath = await applyRename(pdf, newFilename);
-      setPdfs(prev => prev.map(p => 
-        p.id === id 
-          ? { ...p, name: newFilename, uri: `file://${newPath}`, suggestedTitle: null, status: 'Processed' as PdfStatus } 
-          : p
-      ));
-    } catch (e: any) {
-      console.warn("Failed to apply rename", e);
-      setPdfs(prev => prev.map(p => 
-        p.id === id ? { ...p, errorMessage: e.message } : p
-      ));
-    }
-  }, [pdfs]);
-
   // ── Derived UI state ───────────────────────────────────────────────────────
   const totalCount   = pdfs.length;
   const processedCount = pdfs.filter(
@@ -222,7 +194,7 @@ export default function HomeScreen() {
         <FlatList
           data={activeTab === 'Original' ? pdfs : pdfs.filter(p => p.suggestedTitle || p.status === 'Processing...' || p.status === 'Failed')}
           keyExtractor={(item) => item.id}
-          renderItem={({ item }) => <PdfListItem item={item} activeTab={activeTab} onApplyRename={handleApplyRename} />}
+          renderItem={({ item }) => <PdfListItem item={item} activeTab={activeTab} />}
           contentContainerStyle={styles.listContent}
           initialNumToRender={10}
           maxToRenderPerBatch={10}
@@ -389,18 +361,6 @@ const styles = StyleSheet.create({
   errorMessage: {
     color: '#FCA5A5',
     fontSize: 12,
-  },
-  applyButton: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    marginLeft: 8,
-  },
-  applyButtonText: {
-    color: '#FFF',
-    fontSize: 12,
-    fontWeight: '600',
   },
 
   // ── Button
