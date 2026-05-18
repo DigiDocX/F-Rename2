@@ -37,6 +37,7 @@ export type DiscoveredPdf = {
   name: string;
   status: PdfStatus;
   suggestedTitle: string | null;
+  errorMessage?: string | null;
 };
 
 // ─── Permission helpers ───────────────────────────────────────────────────────
