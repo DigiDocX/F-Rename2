@@ -1,3 +1,5 @@
+import nlp from 'compromise';
+
 export type EntitySource = 'user-override' | 'ocr' | 'metadata';
 
 export type EntityInput = {
@@ -5,7 +7,7 @@ export type EntityInput = {
   text: string;
 };
 
-export type EntityType = 'org' | 'person' | 'place' | 'date' | 'money' | 'product' | 'title';
+export type EntityType = 'noun' | 'verb' | 'org' | 'person' | 'place' | 'date' | 'money' | 'product' | 'title';
 
 export type ExtractedEntity = {
   type: EntityType;
@@ -192,6 +194,26 @@ export function compromiseExtractEntities(inputs: EntityInput[]): ExtractedEntit
       continue;
     }
 
+    // Use compromise NLP
+    const doc = nlp(text) as any;
+    
+    doc.nouns().out('array').forEach((val: string) => {
+      if (val.length > 3) addEntity(input.source, 'noun', val);
+    });
+    doc.verbs().out('array').forEach((val: string) => {
+      if (val.length > 3) addEntity(input.source, 'verb', val);
+    });
+    
+    doc.match('#Date').out('array').forEach((val: string) => addEntity(input.source, 'date', val));
+    doc.match('#Money').out('array').forEach((val: string) => addEntity(input.source, 'money', val));
+    doc.organizations().out('array').forEach((val: string) => addEntity(input.source, 'org', val));
+    doc.places().out('array').forEach((val: string) => addEntity(input.source, 'place', val));
+    doc.people().out('array').forEach((val: string) => {
+      const cleaned = val.replace(new RegExp(`^(${HONORIFICS})\\.?\\s+`, 'i'), '').trim();
+      if (cleaned) addEntity(input.source, 'person', cleaned);
+    });
+
+    // Fallback specific regexes for entities compromise might miss
     addEntitiesFromRegex(text, 'date', ENTITY_REGEX.date, (type, value) =>
       addEntity(input.source, type, value)
     );
@@ -204,6 +226,12 @@ export function compromiseExtractEntities(inputs: EntityInput[]): ExtractedEntit
     addEntitiesFromRegex(text, 'place', ENTITY_REGEX.place, (type, value) =>
       addEntity(input.source, type, value)
     );
+    addEntitiesFromRegex(text, 'person', ENTITY_REGEX.person, (type, value) => {
+      const cleaned = value.replace(new RegExp(`^(${HONORIFICS})\\.?\\s+`, 'i'), '').trim();
+      if (cleaned) {
+        addEntity(input.source, 'person', cleaned);
+      }
+    });
     addEntitiesFromRegex(text, 'product', ENTITY_REGEX.product, (type, value) =>
       addEntity(input.source, type, value)
     );
@@ -217,13 +245,6 @@ export function compromiseExtractEntities(inputs: EntityInput[]): ExtractedEntit
     addEntitiesFromRegex(text, 'title', ENTITY_REGEX.title, (type, value) =>
       addEntity(input.source, type, value)
     );
-
-    addEntitiesFromRegex(text, 'person', ENTITY_REGEX.person, (type, value) => {
-      const cleaned = value.replace(new RegExp(`^(${HONORIFICS})\\.?\\s+`, 'i'), '').trim();
-      if (cleaned) {
-        addEntity(input.source, 'person', cleaned);
-      }
-    });
   }
 
   if (results.length === 0 && orderedInputs.length > 0) {
@@ -237,6 +258,8 @@ export function compromiseExtractEntities(inputs: EntityInput[]): ExtractedEntit
 }
 
 const ENTITY_TYPE_WEIGHTS: Record<EntityType, number> = {
+  noun: 100,
+  verb: 98,
   org: 95,
   person: 90,
   title: 88,
